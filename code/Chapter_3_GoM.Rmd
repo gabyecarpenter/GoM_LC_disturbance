@@ -1,0 +1,887 @@
+---
+title: "GoM Backtracking"
+output: html_document
+date: "2024-08-02"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#Get libraries
+```{r}
+library(tidyverse)
+library(dplyr)
+library(tidyr)
+library(see)
+library(ggplot2)
+library(ggpubr)  
+setwd(getwd())
+```
+
+#Create datasets for distance traveled figure (violin plots)
+```{r}
+for(year in 2001:2023) {
+  
+  cat("Running analysis for year:", year, "\n")
+  
+  # Import datasets - exported from MATLAB
+  dist_15 <- read.csv(paste0("./Data/dist_15_", year, ".txt"), header=FALSE)
+  dist_30 <- read.csv(paste0("./Data/dist_30_", year, ".txt"), header=FALSE)
+  dist_60 <- read.csv(paste0("./Data/dist_60_", year, ".txt"), header=FALSE)
+  dist_90 <- read.csv(paste0("./Data/dist_90_", year, ".txt"), header=FALSE)
+
+  # Function to process data for a given time and range
+  process_data <- function(data, time, month, day, range, release_period, start_row, date_suffix) {
+    data_subset <- data[start_row:(start_row + 19), ] %>%
+      pivot_longer(cols = everything(), values_to = "Distance") %>%
+      mutate(
+        date = paste0(date_suffix, "/", year),  # Using current year from the loop
+        month = month,
+        year = as.character(year),  # Using current year from the loop
+        day = day,
+        range = range,
+        time = time,
+        release_period = release_period
+      ) %>%
+      select(-name)
+    
+    return(data_subset)
+  }
+
+  # Process 15-day data
+  df_dec_15 <- process_data(dist_15, 15, "dec", 31, "10/02-10/17", "10/02-12/31", 1, "12/31")
+  df_oct_15 <- process_data(dist_15, 15, "oct", 1, "07/03-07/18", "07/03-10/01", 21, "10/01")
+  df_jul_15 <- process_data(dist_15, 15, "jul", 1, "04/03-04/18", "04/03-07/02", 41, "07/02")
+  df_apr_15 <- process_data(dist_15, 15, "apr", 1, "01/02-01/17", "01/02-04/02", 61, "04/02")
+
+  # Process 30-day data
+  df_dec_30 <- process_data(dist_30, 30, "dec", 31, "10/02-11/01", "10/02-12/31", 1, "12/31")
+  df_oct_30 <- process_data(dist_30, 30, "oct", 31, "07/03-08/01", "07/03-10/01", 21, "10/01")
+  df_jul_30 <- process_data(dist_30, 30, "jul", 31, "04/03-05/03", "04/03-07/02", 41, "07/02")
+  df_apr_30 <- process_data(dist_30, 30, "apr", 31, "01/02-02/01", "01/02-04/02", 61, "04/02")
+
+  # Process 60-day data
+  df_dec_60 <- process_data(dist_60, 60, "dec", 31, "10/02-12/01", "10/02-12/31", 1, "12/31")
+  df_oct_60 <- process_data(dist_60, 60, "oct", 31, "07/03-09/01", "07/03-10/01", 21, "10/01")
+  df_jul_60 <- process_data(dist_60, 60, "jul", 31, "04/03-06/02", "04/03-07/02", 41, "07/02")
+  df_apr_60 <- process_data(dist_60, 60, "apr", 31, "01/02-03/03", "01/02-04/02", 61, "04/02")
+
+  # Process 90-day data
+  df_dec_90 <- process_data(dist_90, 90, "dec", 31, "10/02-12/31", "10/02-12/31", 1, "12/31")
+  df_oct_90 <- process_data(dist_90, 90, "oct", 31, "07/03-10/01", "07/03-10/01", 21, "10/01")
+  df_jul_90 <- process_data(dist_90, 90, "jul", 31, "04/03-07/02", "04/03-07/02", 41, "07/02")
+  df_apr_90 <- process_data(dist_90, 90, "apr", 31, "01/02-04/02", "01/02-04/02", 61, "04/02")
+
+  # Combine all data for the year
+  df <- bind_rows(
+    df_dec_15, df_dec_30, df_dec_60, df_dec_90,
+    df_oct_15, df_oct_30, df_oct_60, df_oct_90,
+    df_jul_15, df_jul_30, df_jul_60, df_jul_90,
+    df_apr_15, df_apr_30, df_apr_60, df_apr_90
+  )
+
+  # Make a subset for the 90-day release
+  df_90 <- subset(df, time == 90)
+
+  # Save the data frames to the R environment with the year in the name
+  assign(paste0("df_", year), df)
+  assign(paste0("df_90_", year), df_90)
+  
+}
+
+#Combine all year for distance traveled
+df_dist <- bind_rows(
+  df_2001, df_2002, df_2003, df_2004, df_2005,
+  df_2006, df_2007, df_2008, df_2009, df_2010,
+  df_2011, df_2012, df_2013, df_2014, df_2015,
+  df_2016, df_2017, df_2018, df_2019, df_2020,
+  df_2021, df_2022, df_2023
+)
+
+df_90_dist <- bind_rows(
+  df_90_2001, df_90_2002, df_90_2003, df_90_2004, df_90_2005,
+  df_90_2006, df_90_2007, df_90_2008, df_90_2009, df_90_2010,
+  df_90_2011, df_90_2012, df_90_2013, df_90_2014, df_90_2015,
+  df_90_2016, df_90_2017, df_90_2018, df_90_2019, df_90_2020,
+  df_90_2021, df_90_2022, df_90_2023
+)
+
+
+```
+#Repeat distance datasets with Euclidian disstance rather than total distance traveled
+```{r}
+for(year in 2001:2023) {
+  
+  cat("Running analysis for year:", year, "\n")
+  
+  # Import datasets - exported from MATLAB
+  euc_15 <- read.csv(paste0("./Data/euc_15_", year, ".txt"), header=FALSE)
+  euc_30 <- read.csv(paste0("./Data/euc_30_", year, ".txt"), header=FALSE)
+  euc_60 <- read.csv(paste0("./Data/euc_60_", year, ".txt"), header=FALSE)
+  euc_90 <- read.csv(paste0("./Data/euc_90_", year, ".txt"), header=FALSE)
+
+  # Function to process data for a given time and range
+  process_data <- function(data, time, month, day, range, release_period, start_row, date_suffix) {
+    data_subset <- data[start_row:(start_row + 19), ] %>%
+      pivot_longer(cols = everything(), values_to = "Distance") %>%
+      mutate(
+        date = paste0(date_suffix, "/", year),  # Using current year from the loop
+        month = month,
+        year = as.character(year),  # Using current year from the loop
+        day = day,
+        range = range,
+        time = time,
+        release_period = release_period
+      ) %>%
+      select(-name)
+    
+    return(data_subset)
+  }
+
+  # Process 15-day data
+  df_dec_15 <- process_data(euc_15, 15, "dec", 31, "10/02-10/17", "10/02-12/31", 1, "12/31")
+  df_oct_15 <- process_data(euc_15, 15, "oct", 1, "07/03-07/18", "07/03-10/01", 21, "10/01")
+  df_jul_15 <- process_data(euc_15, 15, "jul", 1, "04/03-04/18", "04/03-07/02", 41, "07/02")
+  df_apr_15 <- process_data(euc_15, 15, "apr", 1, "01/02-01/17", "01/02-04/02", 61, "04/02")
+
+  # Process 30-day data
+  df_dec_30 <- process_data(euc_30, 30, "dec", 31, "10/02-11/01", "10/02-12/31", 1, "12/31")
+  df_oct_30 <- process_data(euc_30, 30, "oct", 31, "07/03-08/01", "07/03-10/01", 21, "10/01")
+  df_jul_30 <- process_data(euc_30, 30, "jul", 31, "04/03-05/03", "04/03-07/02", 41, "07/02")
+  df_apr_30 <- process_data(euc_30, 30, "apr", 31, "01/02-02/01", "01/02-04/02", 61, "04/02")
+
+  # Process 60-day data
+  df_dec_60 <- process_data(euc_60, 60, "dec", 31, "10/02-12/01", "10/02-12/31", 1, "12/31")
+  df_oct_60 <- process_data(euc_60, 60, "oct", 31, "07/03-09/01", "07/03-10/01", 21, "10/01")
+  df_jul_60 <- process_data(euc_60, 60, "jul", 31, "04/03-06/02", "04/03-07/02", 41, "07/02")
+  df_apr_60 <- process_data(euc_60, 60, "apr", 31, "01/02-03/03", "01/02-04/02", 61, "04/02")
+
+  # Process 90-day data
+  df_dec_90 <- process_data(euc_90, 90, "dec", 31, "10/02-12/31", "10/02-12/31", 1, "12/31")
+  df_oct_90 <- process_data(euc_90, 90, "oct", 31, "07/03-10/01", "07/03-10/01", 21, "10/01")
+  df_jul_90 <- process_data(euc_90, 90, "jul", 31, "04/03-07/02", "04/03-07/02", 41, "07/02")
+  df_apr_90 <- process_data(euc_90, 90, "apr", 31, "01/02-04/02", "01/02-04/02", 61, "04/02")
+
+  # Combine all data for the year
+  df <- bind_rows(
+    df_dec_15, df_dec_30, df_dec_60, df_dec_90,
+    df_oct_15, df_oct_30, df_oct_60, df_oct_90,
+    df_jul_15, df_jul_30, df_jul_60, df_jul_90,
+    df_apr_15, df_apr_30, df_apr_60, df_apr_90
+  )
+
+  # Make a subset for the 90-day release
+  df_90 <- subset(df, time == 90)
+
+  # Save the data frames to the R environment with the year in the name
+  assign(paste0("df_", year), df)
+  assign(paste0("df_90_", year), df_90)
+  
+}
+
+#Combine all year for distance traveled
+df_euc <- bind_rows(
+  df_2001, df_2002, df_2003, df_2004, df_2005,
+  df_2006, df_2007, df_2008, df_2009, df_2010,
+  df_2011, df_2012, df_2013, df_2014, df_2015,
+  df_2016, df_2017, df_2018, df_2019, df_2020,
+  df_2021, df_2022, df_2023
+)
+
+df_90_euc <- bind_rows(
+  df_90_2001, df_90_2002, df_90_2003, df_90_2004, df_90_2005,
+  df_90_2006, df_90_2007, df_90_2008, df_90_2009, df_90_2010,
+  df_90_2011, df_90_2012, df_90_2013, df_90_2014, df_90_2015,
+  df_90_2016, df_90_2017, df_90_2018, df_90_2019, df_90_2020,
+  df_90_2021, df_90_2022, df_90_2023
+)
+
+
+```
+#Violin Plots
+```{r}
+df_dist$month <- as.factor(df_dist$month)
+df_dist$time <- as.factor(df_dist$time)
+#source("R_rainclouds.R")
+
+#Calculate means over the study period
+dist_means <- df_dist
+
+
+#THIS IS THE BEST ONE NOW - others below are old draftfs/ working code for small tweaks
+#Half violin of entire release period + mean+/-SD for 15/30/60 day periods - THIS IS THE GOOD ONE RIGHT NOW!!! 
+ggplot() +
+  geom_violinhalf(data = df_90_dist,aes(x=release_period,y=Distance, fill = release_period) ,adjust =2, alpha = 0.5, width=1) +
+  # Plot mean by Species
+    stat_summary(data = df_dist, aes(x=release_period, y=Distance, group = time, colour = time),
+               fun.y = mean, 
+               geom = "crossbar", 
+               width = 0.2,
+               position = position_nudge(x = 0.1)) +
+  facet_wrap(~year, nrow = 1,strip.position = "bottom") +
+  theme(strip.placement = "outside") +
+  scale_fill_grey(start = 0.3, end = 0.9) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust=1), panel.spacing.x = unit(0,"lines")) +
+  labs(x = 'Release Period', y = 'Distance (km)', fill = 'Season', colour = 'Mean at days after release') +
+  theme(legend.position = "bottom")
+
+#Going to try visualizing this as a boxplot
+ggplot() +
+  geom_boxplot(data = df_90_dist,aes(x=release_period,y=Distance), outlier.size = 0.1) +
+  # Plot mean by Species
+    stat_summary(data = df_dist, aes(x=release_period, y=Distance, group = time, colour = time),
+               fun.y = mean, 
+               geom = "crossbar", 
+               width = 0.5) +
+  facet_wrap(~year, nrow = 1,strip.position = "bottom") +
+  theme(strip.placement = "outside") +
+  scale_fill_grey(start = 0.3, end = 0.9) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust=1)) +
+  labs(x = 'Release Period', y = 'Distance (km)', colour = 'Mean at days after release') +
+  theme(legend.position = "bottom")
+
+#Boxplot again but going to add the days as seperate boxplots
+ggplot() +
+  geom_boxplot(data = df_dist,aes(x=release_period,y=Distance, fill = time), outlier.size = 0.1) +
+  facet_wrap(~year, nrow = 1,strip.position = "bottom") +
+  theme(strip.placement = "outside") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust=1), panel.spacing.x = unit(0,"lines")) +
+  scale_x_discrete(expand = c(0,0)) +
+  labs(x = 'Release Period', y = 'Distance (km)', fill = "Days after release") +
+  theme(legend.position = "bottom")
+
+mean_by_time <- df_dist %>%
+  group_by(time) %>%
+  summarise(mean_distance = mean(Distance, na.rm = TRUE))
+
+
+#Now add a line for mean across the entire graph
+ggplot() +
+  geom_boxplot(data = df_dist,aes(x=release_period,y=Distance, fill = time), outlier.size = 0.1) +
+  facet_wrap(~year, nrow = 1,strip.position = "bottom") +
+  geom_hline(data = mean_by_time, aes(yintercept = mean_distance, color = time), 
+             linetype = "dashed", size = 1) +
+  theme(strip.placement = "outside") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust=1), panel.spacing.x = unit(0,"lines")) +
+  scale_x_discrete(expand = c(0,0)) +
+  labs(x = 'Release Period', y = 'Distance (km)', fill = "Days after release") +
+  theme(legend.position = "bottom")
+
+
+
+#OTHER DRAFTS
+#Only half violins
+ggplot() +
+  geom_violinhalf(data = df_2013,aes(x=release_period,y=Distance, fill = time),adjust =2, alpha = 0.5) +
+  #geom_point(data = df_2013_90, aes(x=release_period,y=Distance), position = position_jitter(width = .05), size = .0001, alpha = 0.01) +
+  #geom_boxplot(data = df_2013,aes(x=release_period,y=Distance, fill = time),outlier.shape = NA, width = .1, colour = "black")+
+  facet_wrap(~year, strip.position = "bottom") +
+  theme_minimal() +
+  theme(strip.placement = "outside") +
+  labs(title = "Maximum distance traveled", x = 'Release Period', y = 'Distance (km)', fill = 'Mean at days after release') 
+
+
+
+#Try grouping with interaction
+library(ggbeeswarm)
+
+ggplot(df_2013, aes(x=release_period, y=Distance)) + 
+  geom_violin() +
+  geom_quasirandom(aes(x=release_period, y=Distance, fill = time), shape = 21, color = "transparent", dodge.width = 0.9, varwidth = TRUE) +
+  
+
+# Create the half violin plot
+p_half <- ggplot() +
+  geom_violinhalf(data = df_2013_90, aes(x = release_period, y = Distance), adjust = 2, alpha = 0.5) +
+  facet_wrap(~year, strip.position = "bottom")
+
+# Extract violin data
+violin_data <- ggplot_build(p_half)$data[[1]]
+
+# Calculate widths for the means - THIS DOES NOT WORK BECAUSE IT ONLY MAKES 4 GROUPS
+violin_widths <- violin_data %>%
+  group_by(x) %>%
+  summarise(width = max(y) - min(y), .groups = 'drop')
+
+# Map widths to release_period
+width_mapping <- setNames(violin_widths$width, violin_widths$x) #returns 4 values but I think you need 16
+
+# Create a new column in df_2013 for the width based on release_period
+df_2013 <- df_2013 %>%
+  mutate(width = width_mapping[as.character(release_period)])
+
+# Add stat_summary with dynamic widths based on time grouping
+p_half <- p_half +
+  stat_summary(data = df_2013, aes(x = release_period, y = Distance, group = time, colour = time),
+               fun = mean, 
+               geom = "crossbar", 
+               width = width[match(release_period, df_2013$release_period)]) +  # Use the width based on release_period
+  theme_minimal() +
+  theme(strip.placement = "outside") +
+  labs(title = "Maximum distance traveled", x = 'Release Period', y = 'Distance (km)', fill = 'Time (days)')
+
+print(p_half)
+
+```
+
+#Create datasets for proportion of particles near reefs (stacked bar chart)
+```{r}
+# Function to process data for a given year
+process_year_data <- function(year) {
+  # Import list of polygon - GOM area
+  coral_buff <- read.csv("./Data/Area_matches.csv")
+  
+  # Create a placeholder for the combined data for the year
+  conn_combined <- list()
+  
+  # Define the months and their corresponding file names and dates
+  months <- c("apr", "jul", "oct", "dec")
+  dates <- c("04/02", "07/02", "10/01", "12/31")
+  release_periods <- c("01/02-04/02", "04/03-07/02", "07/03-10/01", "10/02-12/31")
+
+  for (i in seq_along(months)) {
+    month <- months[i]
+    date <- dates[i]
+    release_period <- release_periods[i]
+
+    # Import datasets
+    in_data <- read.csv(paste0("./Data/in_", month, "_", year, ".txt"), header=FALSE)
+    on_data <- read.csv(paste0("./Data/on_", month, "_", year, ".txt"), header=FALSE)
+
+    # Combine the data
+    conn_data <- bind_cols(in_data, on_data)
+    colnames(conn_data) <- c("in_part", "on_part")
+
+    # Bind coral buffer
+    conn_data <- bind_cols(conn_data, coral_buff)
+
+    # Add columns
+    conn_data <- conn_data %>%
+      mutate(
+        sum_particles = in_part + on_part,
+        date = paste0(date, "/", year),
+        month = month,
+        year = as.character(year),
+        day = as.numeric(substr(date, 4, 5)),
+        release_period = release_period
+      )
+    
+    # Append to the list
+    conn_combined[[i]] <- conn_data
+  }
+
+  # Combine all monthly datasets for the year
+  conn_year <- bind_rows(conn_combined)
+
+  # Create a proportion by dividing by the timesteps * # particles
+  particles <- 721 * 50000
+  conn_year <- conn_year %>%
+    mutate(prop_part = sum_particles / particles)
+
+  return(conn_year)
+}
+
+# Process data for each year from 2001 to 2023 and combine into a single data frame
+all_years_data <- list()
+for (year in 2001:2023) {
+  all_years_data[[as.character(year)]] <- process_year_data(year)
+}
+
+# Combine all yearly data into one data frame
+df_prop <- bind_rows(all_years_data)
+
+# The combined data frame for all years is now stored in df_all
+
+#Remove all proportions that are zero
+# Assuming your dataset is called df
+df_log <- df_prop %>%
+  filter(prop_part != 0)
+
+#Create a variabe for the log proportions
+
+df_log <- df_log %>%
+  mutate(log_prop = abs(log(prop_part)))
+```
+
+#I think the FINAL stacked bar chart
+```{r}
+#Convert release period to date formatted data
+
+# Remove Areas "FGB" and "no match"
+df_prop_nofgb <- df_prop %>%
+  filter(!Area %in% c("FGB", "no match"))
+
+df_prop_nofgb$date <- as.Date(df_prop_nofgb$date, format = "%m/%d/%Y")
+df_euc$date <- as.Date(df_euc$date, format = "%m/%d/%Y")
+
+mean_dist <- df_euc %>%
+  group_by(time, release_period, year) %>%
+  summarise(mean_distance = mean(Distance, na.rm = TRUE))
+
+mean_dist2 <- df_euc %>%
+  group_by(release_period, year) %>%
+  summarise(mean_distance = mean(Distance, na.rm = TRUE))
+
+# Combine df_mean with df_prop
+combined_df <- df_prop_nofgb %>%
+  left_join(mean_dist2, by = c("release_period", "year"))
+
+
+# Create a new variable combining release_period and year for x-axis
+df_prop_nofgb <- df_prop_nofgb %>%
+  mutate(release_year = paste(release_period, year, sep = "_"))
+
+mean_dist <- mean_dist %>%
+  mutate(release_year = paste(release_period, year, sep = "_"))
+
+df_prop_nofgb <- df_prop_nofgb %>%
+  mutate(release_year = paste(release_period, year, sep = "_"))
+
+mean_dist_90 <- mean_dist %>%
+  filter(time == 90)
+
+# Define the desired order of release_year by grouping periods for each year
+release_order <- c(
+  "01/02-04/02_2001", "04/03-07/02_2001", "07/03-10/01_2001", "10/02-12/31_2001",
+  "01/02-04/02_2002", "04/03-07/02_2002", "07/03-10/01_2002", "10/02-12/31_2002",
+  "01/02-04/02_2003", "04/03-07/02_2003", "07/03-10/01_2003", "10/02-12/31_2003",
+  "01/02-04/02_2004", "04/03-07/02_2004", "07/03-10/01_2004", "10/02-12/31_2004",
+  "01/02-04/02_2005", "04/03-07/02_2005", "07/03-10/01_2005", "10/02-12/31_2005",
+  "01/02-04/02_2006", "04/03-07/02_2006", "07/03-10/01_2006", "10/02-12/31_2006",
+  "01/02-04/02_2007", "04/03-07/02_2007", "07/03-10/01_2007", "10/02-12/31_2007",
+  "01/02-04/02_2008", "04/03-07/02_2008", "07/03-10/01_2008", "10/02-12/31_2008",
+  "01/02-04/02_2009", "04/03-07/02_2009", "07/03-10/01_2009", "10/02-12/31_2009",
+  "01/02-04/02_2010", "04/03-07/02_2010", "07/03-10/01_2010", "10/02-12/31_2010",
+  "01/02-04/02_2011", "04/03-07/02_2011", "07/03-10/01_2011", "10/02-12/31_2011",
+  "01/02-04/02_2012", "04/03-07/02_2012", "07/03-10/01_2012", "10/02-12/31_2012",
+  "01/02-04/02_2013", "04/03-07/02_2013", "07/03-10/01_2013", "10/02-12/31_2013",
+  "01/02-04/02_2014", "04/03-07/02_2014", "07/03-10/01_2014", "10/02-12/31_2014",
+  "01/02-04/02_2015", "04/03-07/02_2015", "07/03-10/01_2015", "10/02-12/31_2015",
+  "01/02-04/02_2016", "04/03-07/02_2016", "07/03-10/01_2016", "10/02-12/31_2016",
+  "01/02-04/02_2017", "04/03-07/02_2017", "07/03-10/01_2017", "10/02-12/31_2017",
+  "01/02-04/02_2018", "04/03-07/02_2018", "07/03-10/01_2018", "10/02-12/31_2018",
+  "01/02-04/02_2019", "04/03-07/02_2019", "07/03-10/01_2019", "10/02-12/31_2019",
+  "01/02-04/02_2020", "04/03-07/02_2020", "07/03-10/01_2020", "10/02-12/31_2020",
+  "01/02-04/02_2021", "04/03-07/02_2021", "07/03-10/01_2021", "10/02-12/31_2021",
+  "01/02-04/02_2022", "04/03-07/02_2022", "07/03-10/01_2022", "10/02-12/31_2022",
+  "01/02-04/02_2023", "04/03-07/02_2023", "07/03-10/01_2023", "10/02-12/31_2023"
+)
+
+# Reorder the release_year variable in df_prop_nofgb and mean_dist dataframes
+df_prop_nofgb <- df_prop_nofgb %>%
+  mutate(release_year = factor(release_year, levels = release_order, ordered = TRUE))
+
+mean_dist <- mean_dist %>%
+  mutate(release_year = factor(release_year, levels = release_order, ordered = TRUE))
+
+df_prop_nofgb <- df_prop_nofgb %>%
+  mutate(release_year = factor(release_year, levels = release_order, ordered = TRUE))
+
+df_prop_nofgb <- df_prop_nofgb %>%
+  group_by(release_year, Area) %>%
+  summarise(prop_sum = sum(prop_part)) 
+  
+log_prop_nofgb <- df_prop_nofgb %>%
+   group_by(release_year, Area) %>%
+  summarise(log_sum_prop = log(prop_sum))
+
+log_prop_nofgb <- log_prop_nofgb %>%
+  filter(Area != "FL")
+
+p4 <- ggplot() +
+  geom_tile(data = log_prop_nofgb, aes(x = release_year, y= Area, fill = log_sum_prop)) +
+  scale_fill_gradientn(colors = hcl.colors(20,"YlGnBu"), na.value = "white") +
+  # Additional themes
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1)) +
+  coord_fixed(ratio = 1.5)
+
+p4
+
+df_prop_nofgb <- df_prop_nofgb %>%
+  group_by(release_year) %>%                     # Group by release_year
+  mutate(prop_sum_scaled = prop_sum / sum(prop_sum, na.rm = TRUE)) %>%  # Create new variable
+  ungroup()                                      # Ungroup after calculation
+
+df_prop_nofgb <- df_prop_nofgb %>%
+  filter(Area != "FL")
+
+p3 <- ggplot() +
+  geom_tile(data = df_prop_nofgb, aes(x = release_year, y= Area, fill = prop_sum_scaled)) +
+  scale_fill_viridis_c(na.value = "#440154FF") +
+  # Additional themes
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1)) +
+  coord_fixed(ratio = 1.5)
+
+p3
+
+p1 <- ggplot() +
+  # Continuous line graph
+  geom_line(data = mean_dist, aes(x = release_year, y = mean_distance, group = time, color = as.factor(time))) +
+  scale_color_manual(values = c("#D3D3D3", "#A9A9A9", "#808080", "#696969")) +  # Light to dark grey shades
+   
+  # Adjusting the x-axis labels for clarity
+  scale_x_discrete(name = 'Release Period and Year') +
+  ylab("Mean particle distance from FGB (km)")+
+  labs(color = "Days after release") +
+
+  # Additional themes
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1)) 
+  
+  p1
+  
+  # Combine the plots into a 1 column x 3 row layout
+ggarrange(p1, p3, p4,
+          ncol = 1,         # Number of columns
+          nrow = 3,         # Number of rows
+          labels = c("A", "B", "C"),  # Optional labels for each plot
+          heights = c(1, 1, 1))  # Optional control over row heights
+
+export <- ggarrange(p1, p3,
+          ncol = 1,         # Number of columns
+          nrow = 2,         # Number of rows
+          heights = c(1, 1, 1))  # Optional control over row heights
+
+
+```
+
+#Stacked bar chart - all old drafts
+```{r}
+library(ggplot2)
+library(RColorBrewer)
+
+brewer.pal(n = 8, name= 'Set2')
+
+#"#66C2A5" "#8DA0CB" "#E78AC3" "#A6D854" "#FFD92F"  "#B3B3B3" "#E5C494"
+
+df_prop$Area <- factor(df_prop$Area, levels = c("C", "Meso", "NY", "WG", "FL", "FGB", "no match"))
+
+# Remove Areas "FGB" and "no match"
+df_prop_nofgb <- df_prop %>%
+  filter(!Area %in% c("FGB", "no match"))
+
+ggplot(df_prop, aes(x = release_period, y = prop_part, fill = Area)) +
+  geom_bar(position="stack", stat = "identity") +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB", "#E78AC3", "#A6D854", "#FFD92F", "#B3B3B3", "#E5C494")) +
+  facet_wrap(~year, nrow = 1, strip.position = "bottom") +
+  theme_minimal() +
+  theme(strip.placement = "outside") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust=1)) +
+  labs(x = 'Release Period', y = 'Proportion of particles reaching reef areas', fill = 'Reef Areas') 
+
+ggplot(df_prop_nofgb, aes(x = release_period, y = prop_part, fill = Area)) +
+  geom_bar(position="stack", stat = "identity") +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB", "#E78AC3", "#A6D854", "#FFD92F", "#B3B3B3", "#E5C494")) +
+  facet_wrap(~year, nrow = 1, strip.position = "bottom") +
+  theme_minimal() +
+  theme(strip.placement = "outside") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust=1)) +
+  labs(x = 'Release Period', y = 'Proportion of particles reaching reef areas', fill = 'Reef Areas') 
+
+ggplot(df_log, aes(x = release_period, y = prop_part, fill = Area)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB", "#E78AC3", "#A6D854", "#B3B3B3", "#E5C494")) +
+  facet_wrap(~year, nrow = 1, strip.position = "bottom") +
+  theme_minimal() +
+  theme(strip.placement = "outside") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust=1)) +
+  labs(x = 'Release Period', y = 'Proportion of particles reaching reef areas', fill = 'Reef Areas') 
+
+
+ggplot(df_log, aes(x = release_period, y = log_prop, fill = Area)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB", "#E78AC3", "#A6D854", "#B3B3B3", "#E5C494")) +
+  facet_wrap(~year, nrow = 1, strip.position = "bottom") +
+  theme_minimal() +
+  theme(strip.placement = "outside") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust=1)) +
+  labs(x = 'Release Period', y = 'Log proportion of particles reaching reef areas', fill = 'Reef Areas') 
+
+#Convert release period to date formatted data
+
+df_log$date <- as.Date(df_log$date, format = "%m/%d/%Y")
+df_dist$date <- as.Date(df_dist$date, format = "%m/%d/%Y")
+
+mean_dist <- df_dist %>%
+  group_by(time, release_period, year) %>%
+  summarise(mean_distance = mean(Distance, na.rm = TRUE))
+
+mean_dist2 <- df_dist %>%
+  group_by(release_period, year) %>%
+  summarise(mean_distance = mean(Distance, na.rm = TRUE))
+
+# Combine df_mean with df_prop
+combined_df <- df_log %>%
+  left_join(mean_dist2, by = c("release_period", "year"))
+
+
+ggplot() +
+  geom_bar(data = combined_df, aes(x = release_period, y = log_prop, fill = Area), stat = "identity") +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB", "#E78AC3", "#A6D854", "#B3B3B3", "#E5C494")) +
+  geom_line(data = combined_df, aes(x =release_period, y = mean_distance)) + 
+  scale_y_continuous(sec.axis = sec_axis(~ ., name = "Distance Traveled (km)")) + 
+  facet_wrap(~year, nrow = 1, strip.position = "bottom") +
+  theme_minimal() +
+  theme(strip.placement = "outside") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust=1)) +
+  labs(x = 'Release Period', y = 'Log proportion of particles reaching reef areas', fill = 'Reef Areas') 
+
+
+
+# Create a new variable combining release_period and year for x-axis
+df_log <- df_log %>%
+  mutate(release_year = paste(release_period, year, sep = "_"))
+
+mean_dist <- mean_dist %>%
+  mutate(release_year = paste(release_period, year, sep = "_"))
+
+df_prop_nofgb <- df_prop_nofgb %>%
+  mutate(release_year = paste(release_period, year, sep = "_"))
+
+mean_dist_90 <- mean_dist %>%
+  filter(time == 90)
+
+# Define the desired order of release_year by grouping periods for each year
+release_order <- c(
+  "01/02-04/02_2001", "04/03-07/02_2001", "07/03-10/01_2001", "10/02-12/31_2001",
+  "01/02-04/02_2002", "04/03-07/02_2002", "07/03-10/01_2002", "10/02-12/31_2002",
+  "01/02-04/02_2003", "04/03-07/02_2003", "07/03-10/01_2003", "10/02-12/31_2003",
+  "01/02-04/02_2004", "04/03-07/02_2004", "07/03-10/01_2004", "10/02-12/31_2004",
+  "01/02-04/02_2005", "04/03-07/02_2005", "07/03-10/01_2005", "10/02-12/31_2005",
+  "01/02-04/02_2006", "04/03-07/02_2006", "07/03-10/01_2006", "10/02-12/31_2006",
+  "01/02-04/02_2007", "04/03-07/02_2007", "07/03-10/01_2007", "10/02-12/31_2007",
+  "01/02-04/02_2008", "04/03-07/02_2008", "07/03-10/01_2008", "10/02-12/31_2008",
+  "01/02-04/02_2009", "04/03-07/02_2009", "07/03-10/01_2009", "10/02-12/31_2009",
+  "01/02-04/02_2010", "04/03-07/02_2010", "07/03-10/01_2010", "10/02-12/31_2010",
+  "01/02-04/02_2011", "04/03-07/02_2011", "07/03-10/01_2011", "10/02-12/31_2011",
+  "01/02-04/02_2012", "04/03-07/02_2012", "07/03-10/01_2012", "10/02-12/31_2012",
+  "01/02-04/02_2013", "04/03-07/02_2013", "07/03-10/01_2013", "10/02-12/31_2013",
+  "01/02-04/02_2014", "04/03-07/02_2014", "07/03-10/01_2014", "10/02-12/31_2014",
+  "01/02-04/02_2015", "04/03-07/02_2015", "07/03-10/01_2015", "10/02-12/31_2015",
+  "01/02-04/02_2016", "04/03-07/02_2016", "07/03-10/01_2016", "10/02-12/31_2016",
+  "01/02-04/02_2017", "04/03-07/02_2017", "07/03-10/01_2017", "10/02-12/31_2017",
+  "01/02-04/02_2018", "04/03-07/02_2018", "07/03-10/01_2018", "10/02-12/31_2018",
+  "01/02-04/02_2019", "04/03-07/02_2019", "07/03-10/01_2019", "10/02-12/31_2019",
+  "01/02-04/02_2020", "04/03-07/02_2020", "07/03-10/01_2020", "10/02-12/31_2020",
+  "01/02-04/02_2021", "04/03-07/02_2021", "07/03-10/01_2021", "10/02-12/31_2021",
+  "01/02-04/02_2022", "04/03-07/02_2022", "07/03-10/01_2022", "10/02-12/31_2022",
+  "01/02-04/02_2023", "04/03-07/02_2023", "07/03-10/01_2023", "10/02-12/31_2023"
+)
+
+# Reorder the release_year variable in df_log and mean_dist dataframes
+df_log <- df_log %>%
+  mutate(release_year = factor(release_year, levels = release_order, ordered = TRUE))
+
+mean_dist <- mean_dist %>%
+  mutate(release_year = factor(release_year, levels = release_order, ordered = TRUE))
+
+df_prop_nofgb <- df_prop_nofgb %>%
+  mutate(release_year = factor(release_year, levels = release_order, ordered = TRUE))
+
+# Now you can use the reordered release_year in your ggplot
+
+ggplot() +
+  # Bar graph
+  geom_col(data = df_log, aes(x = release_year, y = log_prop, fill = Area), position = "stack") +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB", "#E78AC3", "#A6D854", "#B3B3B3", "#E5C494")) +
+  
+  # Continuous line graph
+  geom_line(data = mean_dist, aes(x = release_year, y = mean_distance/10000, group = time, color = as.factor(time))) +
+  scale_color_manual(values = c("#D3D3D3", "#A9A9A9", "#808080", "#696969")) +  # Light to dark grey shades
+  
+  # Primary y-axis
+  scale_y_continuous(name = 'Log proportion of particles reaching reef areas', 
+                     sec.axis = sec_axis(~ ., name = "Distance Traveled (km)")) + 
+  
+  # Adjusting the x-axis labels for clarity
+  scale_x_discrete(name = 'Release Period and Year') +
+  
+  # Additional themes
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1)) +
+  labs(fill = 'Reef Areas')
+
+ggplot() +
+  # Bar graph
+  geom_col(data = df_prop_nofgb, aes(x = release_year, y = prop_part, fill = Area), position = "stack") +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB", "#E78AC3", "#A6D854", "#B3B3B3", "#E5C494")) +
+  
+# Continuous line graph
+  geom_line(data = mean_dist, aes(x = release_year, y = mean_distance/1000000, group = time, color = as.factor(time))) +
+  scale_color_manual(values = c("#D3D3D3", "#A9A9A9", "#808080", "#696969")) +   # Light to dark grey shades
+  
+  # Primary y-axis
+  scale_y_continuous(name = 'Proportion of particles reaching reef areas', 
+                     sec.axis = sec_axis(~ . *1000000, name = "Distance Traveled (km)")) + 
+  
+  # Adjusting the x-axis labels for clarity
+  scale_x_discrete(name = 'Release Period and Year') +
+  
+  # Additional themes
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1)) +
+  labs(fill = 'Reef Areas')
+
+library(ggplot2)
+
+# Create a data frame for shading (adjust ymin and ymax as needed)
+shading_df <- data.frame(
+  xmin = rep(seq(1, length(unique(df_prop_nofgb$release_year)), by = 8), each = 1),
+  xmax = rep(seq(4, length(unique(df_prop_nofgb$release_year)), by = 8), each = 1),
+  ymin = -Inf,  # Adjust this as needed to fit your data
+  ymax = Inf    # Adjust this as needed to fit your data
+)
+
+# Create the plot
+ggplot() +
+  # Shaded areas
+  geom_rect(data = shading_df, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax), 
+            fill = "lightgrey", alpha = 0.2) +  # Adjust fill color and transparency
+
+  # Bar graph
+  geom_col(data = df_prop_nofgb, aes(x = release_year, y = prop_part, fill = Area), position = "stack") +
+  scale_fill_manual(values = c("#66C2A5", "#8DA0CB", "#E78AC3", "#A6D854", "#B3B3B3", "#E5C494")) +
+
+  # Continuous line graph
+  geom_line(data = mean_dist, aes(x = release_year, y = mean_distance / 1000000, group = time, color = as.factor(time))) +
+  scale_color_manual(values = c("#D3D3D3", "#A9A9A9", "#808080", "#696969")) +  # Light to dark grey shades
+
+  # Primary y-axis
+  scale_y_continuous(name = 'Proportion of particles reaching reef areas', 
+                     sec.axis = sec_axis(~ . * 1000000, name = "Distance Traveled (km)")) + 
+
+  # Adjusting the x-axis labels for clarity
+  scale_x_discrete(name = 'Release Period and Year') +
+
+  # Additional themes
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1)) +
+  labs(fill = 'Reef Areas')
+
+
+#OLD STUFF
+  
+p1 <- ggplot() +
+  # Continuous line graph
+  geom_line(data = mean_dist, aes(x = release_year, y = mean_distance, group = time, color = as.factor(time))) +
+  scale_color_manual(values = c("#D3D3D3", "#A9A9A9", "#808080", "#696969")) +  # Light to dark grey shades
+   
+  # Adjusting the x-axis labels for clarity
+  scale_x_discrete(name = 'Release Period and Year') +
+  ylab("Mean particle distance from FGB (km)")+
+  labs(color = "Days after release") +
+
+  # Additional themes
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1)) 
+  
+  p1
+  # Combine the plots into a 1 column x 3 row layout
+ggarrange(p1, p3, p4,
+          ncol = 1,         # Number of columns
+          nrow = 3,         # Number of rows
+          labels = c("A", "B", "C"),  # Optional labels for each plot
+          heights = c(1, 1, 1))  # Optional control over row heights
+
+export <- ggarrange(p1, p3,
+          ncol = 1,         # Number of columns
+          nrow = 2,         # Number of rows
+          heights = c(1, 1, 1))  # Optional control over row heights
+
+p_dist_stacked <- ggplot() +
+
+  
+  mean_dist$time <- factor(mean_dist$time, levels = rev(sort(unique(mean_dist$time))))
+
+  p_dist_stacked <- 
+    ggplot(data = mean_dist, aes(x = release_year, y = mean_distance, fill = as.factor(time), group = time))+
+    geom_area(position = "identity") +
+    scale_fill_manual(values = c("#696969","#808080", "#A9A9A9", "#D3D3D3"))+   # Light to dark grey shades
+    
+  
+  #Change labels
+  xlab("Release Period") +
+  ylab("Mean distance traveled (km)") +
+  
+
+  # Additional themes
+  scale_x_discrete(expand = c(0, 0)) +  # Remove indentation on x-axis
+  scale_y_continuous(expand = c(0, 0)) +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1)) 
+  
+  p_dist_stacked
+  
+  
+  # Background shading
+  geom_rect(data = year_bands, 
+            aes(xmin = release_period - 0.5, 
+                xmax = release_period + 0.5, 
+                ymin = -Inf, 
+                ymax = Inf, 
+                fill = shade), 
+            alpha = 0.2) +  
+
+  # Stacked area chart
+  geom_area(data = mean_dist, 
+            aes(x = release_year, 
+                y = mean_distance, 
+                fill = as.factor(time), 
+                group = time), 
+            position = "identity") +
+
+  # FIXED COLOR SCALE
+  scale_fill_manual(values = c("#696969","#808080", "#A9A9A9", "#D3D3D3", "#B0B0B0", "#505050")) + 
+
+  # Remove legend for background shading
+  guides(fill = guide_legend(override.aes = list(alpha = 1))) +
+  
+  # Labels and theme
+  xlab("Release Period") +
+  ylab("Mean distance traveled (km)") +
+  scale_x_continuous(expand = c(0, 0), breaks = unique(mean_dist$release_year)) +  
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1), 
+        panel.background = element_blank(),
+        legend.position = "right")
+
+p_dist_stacked
+
+# Filter dataset to keep only one time point (e.g., the first unique one)
+mean_dist_filtered <- mean_dist %>%
+  filter(time == 90) %>%
+  arrange(release_year)
+
+# Create x-axis labels: Assign `year` only to every fourth row, leave others blank
+mean_dist_filtered <- mean_dist_filtered %>%
+  mutate(label = ifelse(row_number() %% 4 == 0, as.character(year), ""))  # Assign year to every fourth row
+
+
+# Generate the stacked area plot
+p_dist_stacked <- ggplot(data = mean_dist, 
+                          aes(x = release_year, y = mean_distance, fill = as.factor(time), group = time)) +
+  geom_area(position = "identity") +
+  scale_fill_manual(values = c("#696969","#808080", "#A9A9A9", "#D3D3D3")) +  # Light to dark grey shades
+  
+  # Change labels
+  xlab("Year") +
+  ylab("Mean distance traveled (km)") +
+  
+  # Modify x-axis labels to show `year` at every second position in groups of 4
+  scale_x_discrete(expand = c(0, 0), labels = mean_dist$label) +  
+
+  # Additional themes
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 90, vjust = 1, hjust = 1)) 
+
+p_dist_stacked
+
+
+
+```
